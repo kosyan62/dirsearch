@@ -18,11 +18,11 @@
 
 import gc
 import os
-import psycopg
 import re
 import time
-import mysql.connector
 
+from mysql.connector import Error as MysqlError
+from psycopg import Error as PostgresqlError
 from urllib.parse import urlparse
 
 from lib.connection.dns import cache_dns
@@ -185,8 +185,8 @@ class Controller:
             self.setup_reports()
         except (
             InvalidURLException,
-            mysql.connector.Error,
-            psycopg.Error,
+            MysqlError,
+            PostgresqlError,
         ) as e:
             logger.exception(e)
             interface.error(str(e))
@@ -554,11 +554,11 @@ class Controller:
     def process(self):
         while True:
             try:
-                while not self.fuzzer.is_finished():
-                    if self.is_timed_out():
-                        raise SkipTargetInterrupt(
-                            "Runtime exceeded the maximum set by the user"
-                        )
+                self.fuzzer.join_threads()
+                if self.is_timed_out():
+                    raise SkipTargetInterrupt(
+                        "Runtime exceeded the maximum set by the user"
+                    )
 
                 break
 

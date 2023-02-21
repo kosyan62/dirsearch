@@ -121,15 +121,10 @@ class Fuzzer:
         for thread in self._threads:
             thread.start()
 
-    def is_finished(self):
-        if self.exc:
-            raise self.exc
-
+    def join_threads(self):
         for thread in self._threads:
             if thread.is_alive():
-                return False
-
-        return True
+                thread.join()
 
     def play(self):
         self._play_event.set()

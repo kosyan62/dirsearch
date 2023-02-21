@@ -49,9 +49,10 @@ class DynamicContentParser:
             return True
 
         diff = self._differ.compare(self._base_content.split(), content.split())
-        static_patterns_are_matched = self._static_patterns == self.get_static_patterns(diff)
-        match_ratio = difflib.SequenceMatcher(None, self._base_content, content).ratio()
-        return static_patterns_are_matched or match_ratio > MAX_MATCH_RATIO
+        if self._static_patterns == self.get_static_patterns(diff):
+            return True
+        match_ratio = difflib.SequenceMatcher(None, self._base_content, content).quick_ratio()
+        return match_ratio > MAX_MATCH_RATIO
 
     @staticmethod
     def get_static_patterns(patterns):

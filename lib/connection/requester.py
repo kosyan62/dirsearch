@@ -46,6 +46,7 @@ from lib.connection.response import Response
 from lib.utils.common import safequote
 from lib.utils.file import FileUtils
 from lib.utils.mimetype import guess_mimetype
+from lib.utils.rate import RateLimiter
 
 # Disable InsecureRequestWarning from urllib3
 urllib3.disable_warnings(urllib3.exceptions.SecurityWarning)
@@ -66,7 +67,6 @@ class Requester:
     def __init__(self):
         self._url = None
         self._proxy_cred = None
-        self._rate = 0
         self.headers = CaseInsensitiveDict(options["headers"])
         self.agents = []
         self.session = requests.Session()
@@ -75,6 +75,8 @@ class Requester:
             options["cert_file"],
             options["key_file"],
         )
+
+        self.rate_limiter = RateLimiter(rate=options["max_rate"])
 
         if options["random_agents"]:
             self._fetch_agents()
@@ -137,10 +139,7 @@ class Requester:
     # :path: is expected not to start with "/"
     def request(self, path, proxy=None):
         # Pause if the request rate exceeded the maximum
-        while self.is_rate_exceeded():
-            time.sleep(0.1)
-
-        self.increase_rate()
+        self.rate_limiter.pause()
 
         err_msg = None
 
@@ -221,17 +220,7 @@ class Requester:
 
         raise RequestException(err_msg)
 
-    def is_rate_exceeded(self):
-        return self._rate >= options["max_rate"] > 0
-
-    def decrease_rate(self):
-        self._rate -= 1
-
-    def increase_rate(self):
-        self._rate += 1
-        threading.Timer(1, self.decrease_rate).start()
-
     @property
     @cached(RATE_UPDATE_DELAY)
     def rate(self):
-        return self._rate
+        return self.rate_limiter.get_rate()
