@@ -27,12 +27,13 @@ from lib.core.settings import (
     WILDCARD_TEST_POINT_MARKER,
 )
 from lib.parse.url import clean_path
-from lib.utils.diff import generate_matching_regex, DynamicContentParser
+from lib.utils.diff import generate_matching_regex, DynamicContentDiffer
 from lib.utils.random import rand_string
-
+from lib.core.data import options
 
 class Scanner:
     def __init__(self, requester, **kwargs):
+        self.content_parser = None
         self.path = kwargs.get("path", "")
         self.tested = kwargs.get("tested", [])
         self.context = kwargs.get("context", "all cases")
@@ -67,8 +68,8 @@ class Scanner:
             rand_string(TEST_PATH_LENGTH, omit=first_path),
         )
         second_response = self.requester.request(second_path)
-
         if first_response.redirect and second_response.redirect:
+            # Generate a regex that matches both redirects
             self.wildcard_redirect_regex = self.generate_redirect_regex(
                 clean_path(first_response.redirect),
                 first_path,
@@ -77,9 +78,8 @@ class Scanner:
             )
             logger.debug(f'Pattern (regex) to detect wildcard redirects for "{self.context}": {self.wildcard_redirect_regex}')
 
-        self.content_parser = DynamicContentParser(
-            first_response.content, second_response.content
-        )
+        if not self.content_parser:
+            self.content_parser = DynamicContentDiffer(first_response.content)
 
     def get_duplicate(self, response):
         for category in self.tested:
@@ -90,7 +90,11 @@ class Scanner:
         return None
 
     def is_wildcard(self, response):
-        """Check if response is similar to wildcard response"""
+        """
+        Check if response is similar to wildcard response. Is true if response is almost similar with test page.
+        There could be little differences in test page and response:
+        timestamp, requested path, dynamic id and names of elements.
+        """
 
         # Compare 2 binary responses (Response.content is empty if the body is binary)
         if not self.response.content and not response.content:
@@ -106,7 +110,6 @@ class Scanner:
         if self.response.status != response.status:
             return True
 
-        # Read from line 129 to 138 to understand the workflow of this.
         if self.wildcard_redirect_regex and response.redirect:
             # - unquote(): Sometimes, some path characters get encoded or decoded in the response redirect
             # but it's still a wildcard redirect, so unquote everything to prevent false positives

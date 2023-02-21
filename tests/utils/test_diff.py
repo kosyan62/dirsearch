@@ -18,13 +18,63 @@
 
 from unittest import TestCase
 
-from lib.utils.diff import DynamicContentParser, generate_matching_regex
+import requests
+from bs4 import BeautifulSoup
+
+from lib.utils.diff import DynamicContentDiffer, get_element_ratio, generate_matching_regex
+
+
 
 
 class TestDiff(TestCase):
     def test_generate_matching_regex(self):
         self.assertEqual(generate_matching_regex("add.php", "abc.php"), "^a.*\\.php$", "Matching regex isn't correct")
 
-    def test_dynamic_content_parser(self):
-        self.assertEqual(DynamicContentParser("a b c", "a b d")._static_patterns, ["  a", "  b"], "Static patterns are not right")
-        self.assertTrue(DynamicContentParser("a b c", "a b d").compare_to("a b ef"))
+    def test_get_element_ratio(self):
+        element = """
+        <div class="section" id="beautiful-soup-documentation-{id}">
+            <span id="documentation-{id}"></span>
+            <h1>
+                Beautiful Soup Documentation <a class="headerlink" href="#beautiful-soup-documentation" 
+                title="Permalink to this headline">*</a>
+            </h1>
+        </div>
+        """
+
+        base_html = element.format(id=1)
+        test_html = element.format(id=2)
+
+        # Test with base element
+        base_element = BeautifulSoup(base_html, "html.parser").find("div")
+        ratio = get_element_ratio(base_element, base_element)
+        self.assertEqual(ratio, 1.0, "Base element should be 100% similar to itself")
+
+        # Test with almost same elements
+        test_element = BeautifulSoup(test_html, "html.parser").find("div")
+        ratio = get_element_ratio(base_element, test_element)
+        self.assertGreater(ratio, 0.98, "Element's ratio to similar element should be greater than 98")
+
+        # Test with different elements
+        different_html = test_html.replace("Beautiful", "Ugly")
+        test_element = BeautifulSoup(different_html, "html.parser").find("div")
+        ratio = get_element_ratio(base_element, test_element)
+        self.assertLess(ratio, 0.95, "Element's ratio to different element should be less than 95")
+
+    def test_dynamic_content_differ(self):
+        base_page = requests.get("https://www.github.com/").text
+        differ = DynamicContentDiffer(base_page)
+
+        # Test with same page
+        result = differ.compare_to(base_page)
+        self.assertTrue(result, "Page should be 100% similar to itself")
+
+        # Test with almost same page
+        test_page = requests.get("https://www.github.com/").text
+        result = differ.compare_to(test_page)
+        print(test_page == base_page)
+        self.assertTrue(result, "Page should be 100% similar to itself")
+
+        # Test with different page
+        test_page = requests.get("https://www.google.com/").text
+        result = differ.compare_to(test_page)
+        self.assertFalse(result, "Page should be different to another page")
