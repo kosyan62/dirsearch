@@ -23,38 +23,89 @@ from bs4 import BeautifulSoup
 
 from lib.core.settings import MAX_MATCH_RATIO
 
+TEXT_WEIGHT = 2
+NAME_WEIGHT = 3
+ATTRS_WEIGHT = 1
 
-def get_element_ratio(base_tag, test_tag):
+
+def get_dict_ratio(base_dict, test_dict):
+    """
+    Compare 2 dictionaries and return the ratio of similarity.
+    """
+    if not base_dict and not test_dict:
+        return 1
+    elif not base_dict or not test_dict:
+        return 0
+    else:
+        score = 0
+        all_keys = set(base_dict.keys()).union(set(test_dict.keys()))
+        for key in all_keys:
+            if key in base_dict.keys() and key in test_dict.keys():
+                attr_score = compare_text(base_dict[key], test_dict[key])
+                score += attr_score
+            else:
+                score -= 0.5  # 50% penalty for missing keys
+        score = 0 if score < 0 else score / len(base_dict)
+        if score < MAX_MATCH_RATIO:
+            print(f"get_dict_ratio: {score}, base_dict: {base_dict}, test_dict: {test_dict}")
+        return score
+
+
+def compare_text(base_text, test_text):
+    """
+    Compare 2 strings and return the ratio of similarity.
+    """
+    if not base_text and not test_text:
+        return 1
+    elif base_text == test_text:
+        return 1
+    elif not base_text or not test_text:
+        return 0
+    else:
+        return difflib.SequenceMatcher(None, base_text, test_text).quick_ratio()
+
+
+def get_elements_differ_ratio(base_tag, test_tag):
+    """Compare 2 elements and return the ratio of similarity."""
+    text_score = compare_text(base_tag.text, test_tag.text)
+    name_score = compare_text(base_tag.name, test_tag.name)
+    attrs_score = get_dict_ratio(base_tag.attrs, test_tag.attrs)
+
+    # weight the scores. Name is more important than text etc.
+    sum_weights = TEXT_WEIGHT + NAME_WEIGHT + ATTRS_WEIGHT
+    sum_scores = text_score * TEXT_WEIGHT + name_score * NAME_WEIGHT + attrs_score * ATTRS_WEIGHT
+    final_score = sum_scores / sum_weights
+
+    print(f"final_score: {final_score}, text_score: {text_score}, name_score: {name_score}, attrs_score: {attrs_score}")
+
+    return final_score
+
+
+def get_pages_differ_ratio(base_tag, test_tag):
     """
     Go through the base response and count all elements diff ratio.
     """
-    text_score = difflib.SequenceMatcher(None, base_tag.text, test_tag.text).quick_ratio()
-    name_score = difflib.SequenceMatcher(None, base_tag.name, test_tag.name).quick_ratio()
-    children_score = difflib.SequenceMatcher(None,
-                                             [child.name for child in base_tag.children],
-                                             [child.name for child in test_tag.children]).quick_ratio()
+    elements_score = get_elements_differ_ratio(base_tag, test_tag)
 
-    if not base_tag.attrs and not test_tag.attrs:
-        attrs_score = 1
-    else:
-        attrs_score = 0
-        for key in base_tag.attrs.keys():
-            if key in test_tag.attrs.keys():
-                attr_score = difflib.SequenceMatcher(None, base_tag.attrs[key], test_tag.attrs[key]).quick_ratio()
-                attrs_score += attr_score
-        for key in test_tag.attrs.keys():
-            if key not in base_tag.attrs.keys():
-                attrs_score -= 1
-            attrs_score = 0 if attrs_score < 0 else attrs_score
-        attrs_score = attrs_score / len(base_tag.attrs)
+    try:
+        children_score = 0
+        children_len = 0
+        for base_child, test_child in zip(base_tag.children, test_tag.children, strict=True):
+            children_len += 1
+            children_score += compare_text(base_child.name, test_child.name)
+        children_score = children_score / children_len
+    except ValueError:
+        children_score = 0
+    except ZeroDivisionError:
+        children_score = 1
+    final_score = (elements_score + children_score) / 2
 
-    # weight the scores. text is more important than children, etc.
-    print(f"text_score: {text_score}, name_score: {name_score}, children_score: {children_score}, attrs_score: {attrs_score}")
-    return (text_score + name_score + children_score + attrs_score) / 4
+    return final_score
 
 
 class DynamicContentDiffer:
     """Class to compare 2 dynamic responses"""
+
     def __init__(self, base_content):
         self.base_soup = BeautifulSoup(base_content, "html.parser")
         self.base_elements = self.base_soup.find_all()
@@ -66,17 +117,13 @@ class DynamicContentDiffer:
         """
         test_soup = BeautifulSoup(test_content, "html.parser")
         test_elements = test_soup.find_all()
-        if len(test_elements) == len(self.base_elements):
-            for base_tag, test_tag in zip(self.base_elements, test_elements):
-                if base_tag == test_tag:
-                    ratio = 1
-                else:
-                    ratio = get_element_ratio(base_tag, test_tag)
-                if ratio < MAX_MATCH_RATIO:
-                    print(ratio)
-                    return False
-        else:
+        if not len(test_elements) == len(self.base_elements):
             return False
+        for base_tag, test_tag in zip(self.base_elements, test_elements):
+            if base_tag != test_tag:
+                ratio = get_pages_differ_ratio(base_tag, test_tag)
+                if ratio < MAX_MATCH_RATIO:
+                    return False
         return True
 
 

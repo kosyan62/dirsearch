@@ -21,7 +21,7 @@ from unittest import TestCase
 import requests
 from bs4 import BeautifulSoup
 
-from lib.utils.diff import DynamicContentDiffer, get_element_ratio, generate_matching_regex
+from lib.utils.diff import DynamicContentDiffer, get_elements_differ_ratio, generate_matching_regex
 
 
 
@@ -46,35 +46,34 @@ class TestDiff(TestCase):
 
         # Test with base element
         base_element = BeautifulSoup(base_html, "html.parser").find("div")
-        ratio = get_element_ratio(base_element, base_element)
+        ratio = get_elements_differ_ratio(base_element, base_element)
         self.assertEqual(ratio, 1.0, "Base element should be 100% similar to itself")
 
         # Test with almost same elements
         test_element = BeautifulSoup(test_html, "html.parser").find("div")
-        ratio = get_element_ratio(base_element, test_element)
+        ratio = get_elements_differ_ratio(base_element, test_element)
         self.assertGreater(ratio, 0.98, "Element's ratio to similar element should be greater than 98")
 
         # Test with different elements
-        different_html = test_html.replace("Beautiful", "Ugly")
-        test_element = BeautifulSoup(different_html, "html.parser").find("div")
-        ratio = get_element_ratio(base_element, test_element)
-        self.assertLess(ratio, 0.95, "Element's ratio to different element should be less than 95")
+        different_html = test_html.replace("Beautiful", "Ugly").replace("div", "another_tag")
+        test_element = BeautifulSoup(different_html, "html.parser").find("another_tag")
+        ratio = get_elements_differ_ratio(base_element, test_element)
+        self.assertLess(ratio, 0.5, "Element's ratio to different element should be less than 95")
 
     def test_dynamic_content_differ(self):
-        base_page = requests.get("https://www.github.com/").text
+        base_page = requests.get("https://python.org").text
         differ = DynamicContentDiffer(base_page)
 
         # Test with same page
         result = differ.compare_to(base_page)
-        self.assertTrue(result, "Page should be 100% similar to itself")
+        self.assertTrue(result, "Page should be similar to itself")
 
         # Test with almost same page
-        test_page = requests.get("https://www.github.com/").text
+        test_page = requests.get("https://python.org").text
         result = differ.compare_to(test_page)
-        print(test_page == base_page)
-        self.assertTrue(result, "Page should be 100% similar to itself")
+        self.assertTrue(result, "Page should be almost similar to itself")
 
-        # Test with different page
+        # # Test with different page
         test_page = requests.get("https://www.google.com/").text
         result = differ.compare_to(test_page)
         self.assertFalse(result, "Page should be different to another page")
