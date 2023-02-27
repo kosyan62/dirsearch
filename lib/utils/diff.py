@@ -46,8 +46,6 @@ def get_dict_ratio(base_dict, test_dict):
             else:
                 score -= 0.5  # 50% penalty for missing keys
         score = 0 if score < 0 else score / len(base_dict)
-        if score < MAX_MATCH_RATIO:
-            print(f"get_dict_ratio: {score}, base_dict: {base_dict}, test_dict: {test_dict}")
         return score
 
 
@@ -75,8 +73,6 @@ def get_elements_differ_ratio(base_tag, test_tag):
     sum_weights = TEXT_WEIGHT + NAME_WEIGHT + ATTRS_WEIGHT
     sum_scores = text_score * TEXT_WEIGHT + name_score * NAME_WEIGHT + attrs_score * ATTRS_WEIGHT
     final_score = sum_scores / sum_weights
-
-    print(f"final_score: {final_score}, text_score: {text_score}, name_score: {name_score}, attrs_score: {attrs_score}")
 
     return final_score
 
@@ -107,6 +103,7 @@ class DynamicContentDiffer:
     """Class to compare 2 dynamic responses"""
 
     def __init__(self, base_content):
+        self.base_content = base_content
         self.base_soup = BeautifulSoup(base_content, "html.parser")
         self.base_elements = self.base_soup.find_all()
 
@@ -115,6 +112,8 @@ class DynamicContentDiffer:
         Compare the base response with the test response using beautiful soup.
         True if the test response is similar to the base response. False otherwise.
         """
+        if self.base_content == test_content:  # for static content
+            return True
         test_soup = BeautifulSoup(test_content, "html.parser")
         test_elements = test_soup.find_all()
         if not len(test_elements) == len(self.base_elements):
