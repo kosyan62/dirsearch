@@ -118,11 +118,13 @@ class DynamicContentDiffer:
         test_elements = test_soup.find_all()
         if not len(test_elements) == len(self.base_elements):
             return False
+        ratios = []
         for base_tag, test_tag in zip(self.base_elements, test_elements):
             if base_tag != test_tag:
-                ratio = get_pages_differ_ratio(base_tag, test_tag)
-                if ratio < MAX_MATCH_RATIO:
-                    return False
+                ratios.append(get_pages_differ_ratio(base_tag, test_tag))
+        # Compare the average of the ratios with the max allowed ratio
+        if ratios and sum(ratios) / len(ratios) < MAX_MATCH_RATIO:
+            return False
         return True
 
 
