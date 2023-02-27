@@ -1,8 +1,11 @@
 FROM python:3-alpine
-LABEL maintainer="maurosoria@protonmail.com"
 
-WORKDIR /root/
-ADD . /root/
+WORKDIR /home/dirsearch_user
+RUN addgroup -S dirsearch_group && adduser -S -G dirsearch_group -s /bin/false dirsearch_user
+RUN chmod 2777 /mnt/
+
+ADD . /home/dirsearch_user/dirsearch
+RUN chown -R dirsearch_user:dirsearch_group /home/dirsearch_user
 
 RUN apk add \
     gcc \
@@ -11,7 +14,8 @@ RUN apk add \
     openssl-dev \
     libffi-dev
 
-RUN pip install -r requirements.txt
+USER dirsearch_user
+RUN python3 -m pip install --no-cache-dir -r ./dirsearch/requirements.txt
 
-ENTRYPOINT ["./dirsearch.py"]
+ENTRYPOINT ["/usr/local/bin/python3","/home/dirsearch_user/dirsearch/dirsearch.py"]
 CMD ["--help"]
